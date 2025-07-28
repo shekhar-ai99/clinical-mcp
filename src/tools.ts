@@ -1,5 +1,6 @@
 // src/tools.ts
-
+import sqlite3 from 'sqlite3';
+const db = new sqlite3.Database('mimiciii_demo.db');
 // --- Mock Data ---
 const mockPatients = {
     "PID-001": {
@@ -33,12 +34,26 @@ const mockGuidelines = [
     }
 ];
 
-// --- Tool Functions ---
-export async function getPatientSummary(patientId: string): Promise<any> {
-    console.log(`[Tools] Searching for patient summary: ${patientId}`);
-    const patient = mockPatients[patientId as keyof typeof mockPatients];
-    return patient || { error: `Patient with ID '${patientId}' not found.` };
+
+export async function getPatientSummary({ patientId }) {
+  return new Promise((resolve, reject) => {
+    db.get("SELECT * FROM patients WHERE SUBJECT_ID = ?", [patientId], (err, row) => {
+      if (err) return reject(err);
+      if (!row) return resolve({ summary: "Patient not found." });
+      // Simple summary example
+      resolve({
+        summary: `Patient ID: ${row.SUBJECT_ID}\nGender: ${row.GENDER}\nDOB: ${row.DOB}\nDOD: ${row.DOD}\nExpired: ${row.EXPIRE_FLAG}`
+      });
+    });
+  });
 }
+
+// --- Tool Functions ---
+//export async function getPatientSummary(patientId: string): Promise<any> {
+ //   console.log(`[Tools] Searching for patient summary: ${patientId}`);
+ //   const patient = mockPatients[patientId as keyof typeof mockPatients];
+ //   return patient || { error: `Patient with ID '${patientId}' not found.` };
+//}
 
 export async function searchGuidelines(topic: string): Promise<any> {
     console.log(`[Tools] Searching for guidelines on topic: ${topic}`);
