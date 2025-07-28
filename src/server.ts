@@ -1,163 +1,77 @@
+// src/server.ts
 import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { getPatientSummary, searchGuidelines } from "./tools.js";
 
+// Initialize the MCP Server using the official SDK
 const server = new McpServer({
-  name: "mcp-streamable-http",
+  name: "Clinical-Intelligence-Server",
   version: "1.0.0",
 });
 
-// Get Chuck Norris joke tool
-const getChuckJoke = server.tool(
-  "get-chuck-joke",
-  "Get a random Chuck Norris joke",
-  async () => {
-    const response = await fetch("https://api.chucknorris.io/jokes/random");
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.value,
-        },
-      ],
-    };
-  }
-);
+// --- Define Tools using the SDK's `server.tool()` method ---
 
-// Get Chuck Norris joke by category tool
-const getChuckJokeByCategory = server.tool(
-  "get-chuck-joke-by-category",
-  "Get a random Chuck Norris joke by category",
+server.tool(
+  "getPatientSummary",
+  "Retrieves a clinical summary for a specific patient by their ID.",
   {
-    category: z.string().describe("Category of the Chuck Norris joke"),
+    patientId: z.string().describe("The unique identifier for the patient (e.g., PID-001)"),
   },
-  async (params: { category: string }) => {
-    const response = await fetch(
-      `https://api.chucknorris.io/jokes/random?category=${params.category}`
-    );
-    const data = await response.json();
+  async (params: { patientId: string }) => {
+    console.log(`[SDK Server] Tool call: getPatientSummary for ID ${params.patientId}`);
+    const result = await getPatientSummary(params.patientId);
+    
+    // Return the JSON result as a string with type "text"
     return {
-      content: [
-        {
-          type: "text",
-          text: data.value,
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 );
 
-// Get Chuck Norris joke categories tool
-const getChuckCategories = server.tool(
-  "get-chuck-categories",
-  "Get all available categories for Chuck Norris jokes",
-  async () => {
-    const response = await fetch("https://api.chucknorris.io/jokes/categories");
-    const data = await response.json();
+server.tool(
+  "searchGuidelines",
+  "Searches for clinical practice guidelines based on a medical topic.",
+  {
+    topic: z.string().describe("The clinical topic to search for (e.g., 'hypertension')"),
+  },
+  async (params: { topic: string }) => {
+    console.log(`[SDK Server] Tool call: searchGuidelines for topic ${params.topic}`);
+    const result = await searchGuidelines(params.topic);
+    
+    // Return the JSON result as a string with type "text"
     return {
-      content: [
-        {
-          type: "text",
-          text: data.join(", "),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 );
 
-// Get Dad joke tool
-const getDadJoke = server.tool(
-  "get-dad-joke",
-  "Get a random dad joke",
-  async () => {
-    const response = await fetch("https://icanhazdadjoke.com/", {
-      headers: {
-        Accept: "application/json",
-      },
-    });
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.joke,
-        },
-      ],
-    };
-  }
-);
-
+// --- Setup Express and the MCP Transport Layer ---
 const app = express();
-app.use(express.json());
+app.use(express.json()); // <-- critical!
+const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
-const transport: StreamableHTTPServerTransport =
-  new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // set to undefined for stateless servers
-  });
-
-// Setup routes for the server
+// Connect the server logic to the transport layer and handle requests
 const setupServer = async () => {
   await server.connect(transport);
+  app.post("/mcp", (req: Request, res: Response) => {
+    transport.handleRequest(req, res, req.body);
+  });
 };
 
-app.post("/mcp", async (req: Request, res: Response) => {
-  console.log("Received MCP request:", req.body);
-  try {
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error("Error handling MCP request:", error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        error: {
-          code: -32603,
-          message: "Internal server error",
-        },
-        id: null,
-      });
-    }
-  }
-});
+// Health check endpoint
+app.get("/", (req, res) => res.send("Clinical Intelligence MCP Server is running."));
 
-app.get("/mcp", async (req: Request, res: Response) => {
-  console.log("Received GET MCP request");
-  res.writeHead(405).end(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      error: {
-        code: -32000,
-        message: "Method not allowed.",
-      },
-      id: null,
-    })
-  );
-});
-
-app.delete("/mcp", async (req: Request, res: Response) => {
-  console.log("Received DELETE MCP request");
-  res.writeHead(405).end(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      error: {
-        code: -32000,
-        message: "Method not allowed.",
-      },
-      id: null,
-    })
-  );
-});
-
-// Start the server
+// --- Start the server ---
 const PORT = process.env.PORT || 3000;
 setupServer()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`MCP Streamable HTTP Server listening on port ${PORT}`);
+      console.log(`✅ Clinical Intelligence Server listening on port ${PORT}`);
     });
   })
   .catch((error) => {
-    console.error("Failed to set up the server:", error);
+    console.error("❌ Failed to set up the server:", error);
     process.exit(1);
   });

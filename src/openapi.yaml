@@ -1,0 +1,126 @@
+openapi: 3.0.1
+info:
+  title: Clinical Intelligence API
+  description: >-
+    An API for accessing clinical intelligence, including patient summaries and medical guidelines. 
+    This specification supports the research paper: "Interoperable Clinical Intelligence Systems: 
+    Service-Oriented Design with OpenAPI and Model Context Protocol".
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /patients/{patientId}/summary:
+    get:
+      summary: Get Patient Summary
+      description: Retrieves a concise clinical summary for a specific patient by their ID.
+      operationId: getPatientSummary
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          description: The unique identifier for the patient (e.g., PID-001).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A clinical summary of the patient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientSummary'
+        '404':
+          description: Patient not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /guidelines/search:
+    get:
+      summary: Search Clinical Guidelines
+      description: Searches for clinical practice guidelines based on a specific medical topic or condition.
+      operationId: searchGuidelines
+      parameters:
+        - name: topic
+          in: query
+          required: true
+          description: The clinical topic to search for (e.g., "hypertension", "diabetes type 2").
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of relevant clinical guidelines.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClinicalGuideline'
+        '404':
+          description: No guidelines found for the specified topic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  schemas:
+    PatientSummary:
+      type: object
+      properties:
+        patientId:
+          type: string
+          example: "PID-001"
+        name:
+          type: string
+          example: "John Doe"
+        dateOfBirth:
+          type: string
+          format: date
+          example: "1985-04-12"
+        lastVisitDate:
+          type: string
+          format: date
+          example: "2025-07-15"
+        activeConditions:
+          type: array
+          items:
+            type: string
+          example: ["Hypertension", "Type 2 Diabetes"]
+        currentMedications:
+          type: array
+          items:
+            type: string
+          example: ["Lisinopril 10mg", "Metformin 500mg"]
+        narrativeSummary:
+          type: string
+          example: "John Doe is a 40-year-old male with a history of hypertension and type 2 diabetes, managed with Lisinopril and Metformin. Last visit showed stable blood pressure and HbA1c levels. Recommend continued monitoring."
+    ClinicalGuideline:
+      type: object
+      properties:
+        guidelineId:
+          type: string
+          example: "GUID-HTN-01"
+        topic:
+          type: string
+          example: "Hypertension"
+        title:
+          type: string
+          example: "2024 ACC/AHA Guideline for the Management of Hypertension"
+        source:
+          type: string
+          example: "American College of Cardiology / American Heart Association"
+        publicationDate:
+          type: string
+          format: date
+          example: "2024-03-01"
+        keyRecommendation:
+          type: string
+          example: "For adults with confirmed hypertension and known CVD or 10-year ASCVD event risk of 10% or higher, a blood pressure target of less than 130/80 mm Hg is recommended."
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "NOT_FOUND"
+        message:
+          type: string
+          example: "The requested resource was not found."
