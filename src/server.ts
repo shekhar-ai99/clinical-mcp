@@ -21,7 +21,8 @@ server.tool(
   },
   async (params: { patientId: string }) => {
     console.log(`[SDK Server] Tool call: getPatientSummary for ID ${params.patientId}`);
-    const result = await getPatientSummary(params.patientId);
+    const result = await getPatientSummary({ patientId: params.patientId });
+
     
     // Return the JSON result as a string with type "text"
     return {
