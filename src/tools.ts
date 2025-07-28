@@ -1,7 +1,8 @@
 import sqlite3 from 'sqlite3';
 //const db = new sqlite3.Database('mimiciii_demo.db');
 // For Colab, use the absolute path!
-const db = new sqlite3.Database('/content/clinical-mcp/mimiciii_demo.db');
+const db = new sqlite3.Database('/content/mimiciii_demo.db');
+
 
 type PatientSummaryParams = { patientId: string | number };
 type PatientRow = {
