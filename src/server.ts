@@ -3,7 +3,8 @@ import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { getPatientSummary, searchGuidelines } from "./tools.js";
+// Import all three of our tool functions
+import { getSummaryFromDB, getSummaryFromFHIR, searchGuidelines } from "./tools.js";
 
 // Initialize the MCP Server using the official SDK
 const server = new McpServer({
@@ -11,27 +12,35 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// --- Define Tools using the SDK's `server.tool()` method ---
+// --- Define All Tools ---
 
+// Tool 1: Get summary from the local SQLite database
 server.tool(
-  "getPatientSummary",
-  "Retrieves an AI-generated clinical summary for a specific patient by their ID from the MIMIC-III database.",
+  "getSummaryFromDB",
+  "Retrieves an AI-generated summary from a patient's clinical notes in the local MIMIC-III database.",
   {
-    // The description now reflects the numeric ID from the database.
     patientId: z.string().describe("The numeric subject ID for the patient (e.g., '109')"),
   },
   async (params: { patientId: string }) => {
-    console.log(`[SDK Server] Tool call: getPatientSummary for ID ${params.patientId}`);
-    // The 'result' object will now contain the AI summary.
-    const result = await getPatientSummary({ patientId: params.patientId });
-    
-    // UPDATED: We stringify the entire result object to show all the new data.
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    const result = await getSummaryFromDB(params);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 );
 
+// Tool 2: Get summary from the live, public FHIR server
+server.tool(
+  "getSummaryFromFHIR",
+  "Retrieves an AI-generated summary from a patient's data on a live, public FHIR server.",
+  {
+    patientId: z.string().describe("The patient's resource ID on the FHIR server (e.g., '1282007')"),
+  },
+  async (params: { patientId: string }) => {
+    const result = await getSummaryFromFHIR(params);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// Tool 3: Search for clinical guidelines
 server.tool(
   "searchGuidelines",
   "Searches for clinical practice guidelines based on a medical topic.",
@@ -39,13 +48,8 @@ server.tool(
     topic: z.string().describe("The clinical topic to search for (e.g., 'hypertension')"),
   },
   async (params: { topic: string }) => {
-    console.log(`[SDK Server] Tool call: searchGuidelines for topic ${params.topic}`);
-    const result = await searchGuidelines(params.topic);
-    
-    // Return the JSON result as a string with type "text"
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    const result = await searchGuidelines(params);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 );
 
@@ -53,7 +57,6 @@ server.tool(
 const app = express();
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
-// Connect the server logic to the transport layer and handle requests
 const setupServer = async () => {
   await server.connect(transport);
   app.post("/mcp", (req: Request, res: Response) => {
@@ -61,10 +64,8 @@ const setupServer = async () => {
   });
 };
 
-// Health check endpoint
 app.get("/", (req, res) => res.send("Clinical Intelligence MCP Server is running."));
 
-// --- Start the server ---
 const PORT = process.env.PORT || 3000;
 setupServer()
   .then(() => {
