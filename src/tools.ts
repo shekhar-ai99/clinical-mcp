@@ -1,86 +1,89 @@
 // src/tools.ts
-import sqlite3 from 'sqlite3';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import FHIR from 'fhir-kit-client';
+import sqlite3 from 'sqlite3';
 
-// --- Securely Initialize API Key ---
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  // This is a critical error, so we stop the application from starting.
-  throw new Error("GEMINI_API_KEY environment variable not set. Please check your Colab Secrets.");
-}
+// --- Initialize ALL Clients ---
 
-// --- Initialize Clients ---
-
-// For Colab, use the absolute path to your database file
+// 1. SQLite Database Client
 const db = new sqlite3.Database('/content/clinical-mcp/mimiciii_demo.db');
 
-// Initialize the Google Gemini client with the validated API key.
+// 2. FHIR Client for the public test server
+const fhirClient = new FHIR({
+  baseUrl: 'https://hapi.fhir.org/baseR4'
+});
+
+// 3. Google Gemini Client
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  throw new Error("GEMINI_API_KEY environment variable not set.");
+}
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
 
 
-// --- Type Definitions ---
+// --- Tool 1: Get Summary from Local MIMIC-III Database ---
 
-type PatientSummaryParams = { patientId: string | number };
-
-// This type represents a row from the NOTEEVENTS table in the MIMIC-III demo DB
-type NoteEventRow = {
-  CATEGORY: string;
-  DESCRIPTION: string;
-  TEXT: string;
-};
-
-// --- Tool Functions ---
-
-export async function getPatientSummary({ patientId }: PatientSummaryParams): Promise<any> {
-  return new Promise((resolve, reject) => {
-    // We query the NOTEEVENTS table to get clinical notes for the patient.
-    const sql = "SELECT CATEGORY, DESCRIPTION, TEXT FROM NOTEEVENTS WHERE SUBJECT_ID = ? AND CATEGORY = 'Discharge summary' LIMIT 1";
+export async function getSummaryFromDB({ patientId }: { patientId: string }): Promise<any> {
+  return new Promise((resolve) => {
+    const sql = "SELECT TEXT FROM NOTEEVENTS WHERE SUBJECT_ID = ? AND CATEGORY = 'Discharge summary' LIMIT 1";
     
-    db.get(sql, [patientId], async (err: Error | null, row: NoteEventRow | undefined) => {
-      if (err) {
-        console.error("Database Error:", err);
-        return resolve({ summary: "A database error occurred." });
+    db.get(sql, [patientId], async (err, row: { TEXT: string } | undefined) => {
+      if (err || !row) {
+        return resolve({ summary: `No discharge summary found for patient ID ${patientId} in the local DB.` });
       }
-      if (!row) {
-        return resolve({ summary: "No discharge summary found for this patient." });
-      }
-
-      // We found a clinical note, now we send it to the Gemini API.
       try {
-        console.log(`[Gemini] Calling API to summarize notes for patient ${patientId}...`);
-        
-        const prompt = `Summarize the following clinical discharge note into a concise paragraph, focusing on the primary diagnosis and treatment plan: \n\n${row.TEXT}`;
-        
+        console.log(`[Gemini] Summarizing note from DB for patient ${patientId}...`);
+        const prompt = `Summarize the following clinical discharge note into a concise paragraph: \n\n${row.TEXT}`;
         const result = await model.generateContent(prompt);
-        const response = result.response;
-        const summaryText = response.text();
-
-        // Resolve with the AI-generated summary and some original data for context.
-        resolve({
-          patientId: patientId,
-          noteCategory: row.CATEGORY,
-          ai_summary: summaryText
-        });
-
-      } catch (geminiError) {
-        console.error("Gemini API Error:", geminiError);
-        // If the API fails, we still return a useful message.
-        resolve({ summary: "Found patient notes, but failed to generate AI summary." });
+        resolve({ source: 'SQLite (MIMIC-III)', patientId, ai_summary: result.response.text() });
+      } catch (e) {
+        resolve({ summary: "Failed to generate AI summary from DB note." });
       }
     });
   });
 }
 
-export async function searchGuidelines(topic: string): Promise<any> {
-  // This function remains unchanged.
-  const mockGuidelines = [
-    {
-      guidelineId: "GUID-HTN-01",
-      topic: "hypertension",
-      title: "2024 ACC/AHA Guideline for the Management of Hypertension",
+// --- Tool 2: Get Summary from Live FHIR Server ---
+
+export async function getSummaryFromFHIR({ patientId }: { patientId: string }): Promise<any> {
+  try {
+    console.log(`[FHIR] Searching for patient with ID: ${patientId}`);
+    const patient = await fhirClient.read({ resourceType: 'Patient', id: patientId });
+    const observations = await fhirClient.search({
+      resourceType: 'Observation',
+      searchParams: { patient: patientId, _sort: '-date', _count: '5' }
+    });
+
+    let clinicalText = `Patient: ${patient.name[0].given.join(' ')} ${patient.name[0].family}, born ${patient.birthDate}.\nRecent Observations:\n`;
+    if (observations.entry) {
+        observations.entry.forEach((entry: any) => {
+            const obs = entry.resource;
+            if (obs.valueQuantity) {
+               clinicalText += `- ${obs.code.text}: ${obs.valueQuantity.value.toFixed(2)} ${obs.valueQuantity.unit} on ${obs.effectiveDateTime}\n`;
+            }
+        });
     }
-  ];
+
+    console.log(`[Gemini] Summarizing data from FHIR for patient ${patientId}...`);
+    const prompt = `Summarize the following clinical data into a concise paragraph: \n\n${clinicalText}`;
+    const result = await model.generateContent(prompt);
+    
+    return {
+      source: 'FHIR',
+      patientId: patient.id,
+      patientName: `${patient.name[0].given.join(' ')} ${patient.name[0].family}`,
+      ai_summary: result.response.text()
+    };
+
+  } catch (error) {
+    return { summary: `Patient with ID '${patientId}' not found or an error occurred on the FHIR server.` };
+  }
+}
+
+// --- Tool 3: Search Guidelines (Unchanged) ---
+export async function searchGuidelines({ topic }: { topic: string }): Promise<any> {
+  const mockGuidelines = [{ guidelineId: "GUID-HTN-01", topic: "hypertension", title: "2024 ACC/AHA Guideline for the Management of Hypertension" }];
   const searchTopic = topic.toLowerCase();
   const results = mockGuidelines.filter(g => g.topic.includes(searchTopic));
   return results.length > 0 ? results : { error: `No guidelines found for topic '${topic}'.` };
