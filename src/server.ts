@@ -58,6 +58,7 @@ server.tool(
 
 // --- Setup Express and Endpoints ---
 const app = express();
+app.use(express.json()); 
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
 // --- Setup for API Documentation ---
