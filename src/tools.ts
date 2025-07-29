@@ -1,15 +1,16 @@
 // src/tools.ts
 import sqlite3 from 'sqlite3';
-import { HfInference } from "@huggingface/inference";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- Initialize Clients ---
 
 // For Colab, use the absolute path to your database file
-const db = new sqlite3.Database('/content/mimiciii_demo.db');
+const db = new sqlite3.Database('/content/clinical-mcp/mimiciii_demo.db');
 
-// Initialize the Hugging Face client by reading the token from the environment.
+// Initialize the Google Gemini client by reading the API key from the environment.
 // This is much more secure than hardcoding it.
-const hf = new HfInference(process.env.HF_TOKEN);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
 
 
 // --- Type Definitions ---
@@ -33,29 +34,31 @@ export async function getPatientSummary({ patientId }: PatientSummaryParams): Pr
     db.get(sql, [patientId], async (err: Error | null, row: NoteEventRow | undefined) => {
       if (err) {
         console.error("Database Error:", err);
-        return reject(err);
+        return resolve({ summary: "A database error occurred." });
       }
       if (!row) {
         return resolve({ summary: "No discharge summary found for this patient." });
       }
 
-      // We found a clinical note, now we send it to the Hugging Face API.
+      // We found a clinical note, now we send it to the Gemini API.
       try {
-        console.log(`[HF] Calling API to summarize notes for patient ${patientId}...`);
-        const summaryResult = await hf.summarization({
-            model: 'facebook/bart-large-cnn',
-            inputs: row.TEXT, // The clinical note text from the database
-        });
+        console.log(`[Gemini] Calling API to summarize notes for patient ${patientId}...`);
+        
+        const prompt = `Summarize the following clinical discharge note into a concise paragraph, focusing on the primary diagnosis and treatment plan: \n\n${row.TEXT}`;
+        
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const summaryText = response.text();
 
         // Resolve with the AI-generated summary and some original data for context.
         resolve({
           patientId: patientId,
           noteCategory: row.CATEGORY,
-          ai_summary: summaryResult.summary_text
+          ai_summary: summaryText
         });
 
-      } catch (hfError) {
-        console.error("Hugging Face API Error:", hfError);
+      } catch (geminiError) {
+        console.error("Gemini API Error:", geminiError);
         // If the API fails, we still return a useful message.
         resolve({ summary: "Found patient notes, but failed to generate AI summary." });
       }
