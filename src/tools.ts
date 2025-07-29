@@ -5,15 +5,9 @@ import sqlite3 from 'sqlite3';
 
 // --- Initialize ALL Clients ---
 
-// 1. SQLite Database Client
 const db = new sqlite3.Database('/content/clinical-mcp/mimiciii_demo.db');
+const fhirClient = new FHIR({ baseUrl: 'https://hapi.fhir.org/baseR4' });
 
-// 2. FHIR Client for the public test server
-const fhirClient = new FHIR({
-  baseUrl: 'https://hapi.fhir.org/baseR4'
-});
-
-// 3. Google Gemini Client
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
   throw new Error("GEMINI_API_KEY environment variable not set.");
@@ -44,29 +38,55 @@ export async function getSummaryFromDB({ patientId }: { patientId: string }): Pr
   });
 }
 
-// --- Tool 2: Get Summary from Live FHIR Server ---
+// --- Tool 2: Get ENHANCED Summary from Live FHIR Server ---
 
 export async function getSummaryFromFHIR({ patientId }: { patientId: string }): Promise<any> {
   try {
     console.log(`[FHIR] Searching for patient with ID: ${patientId}`);
+    // Step 1: Fetch patient demographics
     const patient = await fhirClient.read({ resourceType: 'Patient', id: patientId });
+
+    // Step 2: Fetch patient's active conditions (diagnoses)
+    const conditions = await fhirClient.search({
+      resourceType: 'Condition',
+      searchParams: { patient: patientId, clinical_status: 'active' }
+    });
+
+    // Step 3: Fetch patient's recent lab observations
     const observations = await fhirClient.search({
       resourceType: 'Observation',
       searchParams: { patient: patientId, _sort: '-date', _count: '5' }
     });
 
-    let clinicalText = `Patient: ${patient.name[0].given.join(' ')} ${patient.name[0].family}, born ${patient.birthDate}.\nRecent Observations:\n`;
-    if (observations.entry) {
-        observations.entry.forEach((entry: any) => {
-            const obs = entry.resource;
-            if (obs.valueQuantity) {
-               clinicalText += `- ${obs.code.text}: ${obs.valueQuantity.value.toFixed(2)} ${obs.valueQuantity.unit} on ${obs.effectiveDateTime}\n`;
-            }
+    // Step 4: Build a much richer clinical context for the AI
+    let clinicalText = `Patient: ${patient.name[0].given.join(' ')} ${patient.name[0].family}, born ${patient.birthDate}.\n\n`;
+
+    clinicalText += "Active Conditions:\n";
+    if (conditions.entry && conditions.entry.length > 0) {
+        conditions.entry.forEach((entry: any) => {
+            clinicalText += `- ${entry.resource.code.text}\n`;
         });
+    } else {
+        clinicalText += "- No active conditions found.\n";
     }
 
-    console.log(`[Gemini] Summarizing data from FHIR for patient ${patientId}...`);
-    const prompt = `Summarize the following clinical data into a concise paragraph: \n\n${clinicalText}`;
+    clinicalText += "\nRecent Observations:\n";
+    if (observations.entry && observations.entry.length > 0) {
+        observations.entry.forEach((entry: any) => {
+            const obs = entry.resource;
+            if (obs.valueQuantity) { // For numeric values like blood pressure
+               clinicalText += `- ${obs.code.text}: ${obs.valueQuantity.value.toFixed(2)} ${obs.valueQuantity.unit} on ${obs.effectiveDateTime}\n`;
+            } else if (obs.valueCodeableConcept) { // For categorical values like blood type
+               clinicalText += `- ${obs.code.text}: ${obs.valueCodeableConcept.text}\n`;
+            }
+        });
+    } else {
+        clinicalText += "- No recent observations found.\n";
+    }
+
+    // Step 5: Send the enhanced context to Gemini
+    console.log(`[Gemini] Summarizing enhanced data from FHIR for patient ${patientId}...`);
+    const prompt = `Summarize the following clinical data into a concise, one-paragraph clinical summary: \n\n${clinicalText}`;
     const result = await model.generateContent(prompt);
     
     return {
