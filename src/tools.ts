@@ -7,9 +7,9 @@ import { HfInference } from "@huggingface/inference";
 // For Colab, use the absolute path to your database file
 const db = new sqlite3.Database('/content/mimiciii_demo.db');
 
-// Initialize the Hugging Face client with your token.
-// IMPORTANT: Replace "YOUR_HF_TOKEN" with your actual token.
-const hf = new HfInference("YOUR_HF_TOKEN");
+// Initialize the Hugging Face client by reading the token from the environment.
+// This is much more secure than hardcoding it.
+const hf = new HfInference(process.env.HF_TOKEN);
 
 
 // --- Type Definitions ---
