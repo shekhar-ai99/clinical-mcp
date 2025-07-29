@@ -5,31 +5,56 @@ info:
     An API for accessing clinical intelligence, including patient summaries and medical guidelines. 
     This specification supports the research paper: "Interoperable Clinical Intelligence Systems: 
     Service-Oriented Design with OpenAPI and Model Context Protocol".
-  version: 1.0.0
+  version: "1.0.0"
 servers:
   - url: http://localhost:3000
 paths:
-  /patients/{patientId}/summary:
+  /summary/db/{patientId}:
     get:
-      summary: Get Patient Summary
-      description: Retrieves a concise clinical summary for a specific patient by their ID.
-      operationId: getPatientSummary
+      summary: Get Summary from DB
+      description: Retrieves an AI-generated summary from a patient's clinical notes in the local MIMIC-III database.
+      operationId: getSummaryFromDB
       parameters:
         - name: patientId
           in: path
           required: true
-          description: The unique identifier for the patient (e.g., PID-001).
+          description: The numeric subject ID for the patient (e.g., '109').
           schema:
             type: string
       responses:
         '200':
-          description: A clinical summary of the patient.
+          description: An AI-generated summary of the patient's notes.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PatientSummary'
+                $ref: '#/components/schemas/AiSummary'
         '404':
-          description: Patient not found.
+          description: Patient not found in the database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /summary/fhir/{patientId}:
+    get:
+      summary: Get Summary from FHIR
+      description: Retrieves an AI-generated summary from a patient's data on a live, public FHIR server.
+      operationId: getSummaryFromFHIR
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          description: The patient's resource ID on the FHIR server (e.g., '1282007').
+          schema:
+            type: string
+      responses:
+        '200':
+          description: An AI-generated summary of the patient's FHIR data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSummary'
+        '404':
+          description: Patient not found on the FHIR server.
           content:
             application/json:
               schema:
@@ -43,7 +68,7 @@ paths:
         - name: topic
           in: query
           required: true
-          description: The clinical topic to search for (e.g., "hypertension", "diabetes type 2").
+          description: The clinical topic to search for (e.g., "hypertension").
           schema:
             type: string
       responses:
@@ -63,36 +88,18 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 components:
   schemas:
-    PatientSummary:
+    AiSummary:
       type: object
       properties:
+        source:
+          type: string
+          example: "SQLite (MIMIC-III)"
         patientId:
           type: string
-          example: "PID-001"
-        name:
+          example: "109"
+        ai_summary:
           type: string
-          example: "John Doe"
-        dateOfBirth:
-          type: string
-          format: date
-          example: "1985-04-12"
-        lastVisitDate:
-          type: string
-          format: date
-          example: "2025-07-15"
-        activeConditions:
-          type: array
-          items:
-            type: string
-          example: ["Hypertension", "Type 2 Diabetes"]
-        currentMedications:
-          type: array
-          items:
-            type: string
-          example: ["Lisinopril 10mg", "Metformin 500mg"]
-        narrativeSummary:
-          type: string
-          example: "John Doe is a 40-year-old male with a history of hypertension and type 2 diabetes, managed with Lisinopril and Metformin. Last visit showed stable blood pressure and HbA1c levels. Recommend continued monitoring."
+          example: "The patient is a 70-year-old male with hyperlipidemia..."
     ClinicalGuideline:
       type: object
       properties:
@@ -105,16 +112,6 @@ components:
         title:
           type: string
           example: "2024 ACC/AHA Guideline for the Management of Hypertension"
-        source:
-          type: string
-          example: "American College of Cardiology / American Heart Association"
-        publicationDate:
-          type: string
-          format: date
-          example: "2024-03-01"
-        keyRecommendation:
-          type: string
-          example: "For adults with confirmed hypertension and known CVD or 10-year ASCVD event risk of 10% or higher, a blood pressure target of less than 130/80 mm Hg is recommended."
     ApiError:
       type: object
       properties:
