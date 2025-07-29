@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { getSummaryFromDB, getSummaryFromFHIR, searchGuidelines } from "./tools.js";
 
-// --- NEW: Import Swagger and YAML libraries ---
+// --- Import Swagger and YAML libraries ---
 import swaggerUi from 'swagger-ui-express';
 import yaml from 'js-yaml';
 import fs from 'fs';
@@ -60,14 +60,14 @@ server.tool(
 const app = express();
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
-// --- NEW: Setup for API Documentation ---
-// This is needed to correctly locate files when using ES Modules
+// --- Setup for API Documentation ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const swaggerDocument = yaml.load(fs.readFileSync(path.join(__dirname, 'openapi.yaml'), 'utf8'));
 
 // This creates the new /api-docs endpoint
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// FIX: We cast swaggerDocument to 'any' to resolve the TypeScript error.
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument as any));
 
 
 // --- Setup MCP and Health Check Endpoints ---
