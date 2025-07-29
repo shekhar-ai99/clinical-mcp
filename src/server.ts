@@ -15,19 +15,19 @@ const server = new McpServer({
 
 server.tool(
   "getPatientSummary",
-  "Retrieves a clinical summary for a specific patient by their ID from the MIMIC-III database.",
+  "Retrieves an AI-generated clinical summary for a specific patient by their ID from the MIMIC-III database.",
   {
-    // UPDATED: The description now reflects the numeric ID from the database.
-    patientId: z.string().describe("The numeric subject ID for the patient (e.g., '41', '109')"),
+    // The description now reflects the numeric ID from the database.
+    patientId: z.string().describe("The numeric subject ID for the patient (e.g., '109')"),
   },
   async (params: { patientId: string }) => {
     console.log(`[SDK Server] Tool call: getPatientSummary for ID ${params.patientId}`);
-    // The 'result' object will be { summary: "..." }
+    // The 'result' object will now contain the AI summary.
     const result = await getPatientSummary({ patientId: params.patientId });
     
-    // UPDATED: We now access the .summary property directly for a cleaner output.
+    // UPDATED: We stringify the entire result object to show all the new data.
     return {
-      content: [{ type: "text", text: result.summary }],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 );
