@@ -1,52 +1,77 @@
+// src/tools.ts
 import sqlite3 from 'sqlite3';
-//const db = new sqlite3.Database('mimiciii_demo.db');
-// For Colab, use the absolute path!
+import { HfInference } from "@huggingface/inference";
+
+// --- Initialize Clients ---
+
+// For Colab, use the absolute path to your database file
 const db = new sqlite3.Database('/content/mimiciii_demo.db');
 
+// Initialize the Hugging Face client with your token.
+// IMPORTANT: Replace "YOUR_HF_TOKEN" with your actual token.
+const hf = new HfInference("YOUR_HF_TOKEN");
+
+
+// --- Type Definitions ---
 
 type PatientSummaryParams = { patientId: string | number };
-type PatientRow = {
-  ROW_ID: number;
-  SUBJECT_ID: number;
-  GENDER: string;
-  DOB: string;
-  DOD: string;
-  EXPIRE_FLAG: number;
+
+// This type represents a row from the NOTEEVENTS table in the MIMIC-III demo DB
+type NoteEventRow = {
+  CATEGORY: string;
+  DESCRIPTION: string;
+  TEXT: string;
 };
 
-const mockGuidelines = [
-  {
-    guidelineId: "GUID-HTN-01",
-    topic: "hypertension",
-    title: "2024 ACC/AHA Guideline for the Management of Hypertension",
-    source: "American College of Cardiology / American Heart Association",
-  },
-  {
-    guidelineId: "GUID-DM2-01",
-    topic: "diabetes type 2",
-    title: "Standards of Care in Diabetes—2025",
-    source: "American Diabetes Association (ADA)",
-  }
-];
+// --- Tool Functions ---
 
-export async function getPatientSummary({ patientId }: PatientSummaryParams): Promise<{ summary: string }> {
+export async function getPatientSummary({ patientId }: PatientSummaryParams): Promise<any> {
   return new Promise((resolve, reject) => {
-    db.get(
-      "SELECT * FROM patients WHERE SUBJECT_ID = ?",
-      [patientId],
-      (err: Error | null, row: PatientRow | undefined) => {
-        if (err) return reject(err);
-        if (!row) return resolve({ summary: "Patient not found." });
-        resolve({
-          summary: `Patient ID: ${row.SUBJECT_ID}\nGender: ${row.GENDER}\nDOB: ${row.DOB}\nDOD: ${row.DOD}\nExpired: ${row.EXPIRE_FLAG}`
-        });
+    // We query the NOTEEVENTS table to get clinical notes for the patient.
+    const sql = "SELECT CATEGORY, DESCRIPTION, TEXT FROM NOTEEVENTS WHERE SUBJECT_ID = ? AND CATEGORY = 'Discharge summary' LIMIT 1";
+    
+    db.get(sql, [patientId], async (err: Error | null, row: NoteEventRow | undefined) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return reject(err);
       }
-    );
+      if (!row) {
+        return resolve({ summary: "No discharge summary found for this patient." });
+      }
+
+      // We found a clinical note, now we send it to the Hugging Face API.
+      try {
+        console.log(`[HF] Calling API to summarize notes for patient ${patientId}...`);
+        const summaryResult = await hf.summarization({
+            model: 'facebook/bart-large-cnn',
+            inputs: row.TEXT, // The clinical note text from the database
+        });
+
+        // Resolve with the AI-generated summary and some original data for context.
+        resolve({
+          patientId: patientId,
+          noteCategory: row.CATEGORY,
+          ai_summary: summaryResult.summary_text
+        });
+
+      } catch (hfError) {
+        console.error("Hugging Face API Error:", hfError);
+        // If the API fails, we still return a useful message.
+        resolve({ summary: "Found patient notes, but failed to generate AI summary." });
+      }
+    });
   });
 }
 
 export async function searchGuidelines(topic: string): Promise<any> {
-  console.log(`[Tools] Searching for guidelines on topic: ${topic}`);
+  // This function remains unchanged.
+  const mockGuidelines = [
+    {
+      guidelineId: "GUID-HTN-01",
+      topic: "hypertension",
+      title: "2024 ACC/AHA Guideline for the Management of Hypertension",
+    }
+  ];
   const searchTopic = topic.toLowerCase();
   const results = mockGuidelines.filter(g => g.topic.includes(searchTopic));
   return results.length > 0 ? results : { error: `No guidelines found for topic '${topic}'.` };
