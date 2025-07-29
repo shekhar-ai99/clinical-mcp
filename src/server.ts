@@ -3,18 +3,23 @@ import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-// Import all three of our tool functions
 import { getSummaryFromDB, getSummaryFromFHIR, searchGuidelines } from "./tools.js";
 
-// Initialize the MCP Server using the official SDK
+// --- NEW: Import Swagger and YAML libraries ---
+import swaggerUi from 'swagger-ui-express';
+import yaml from 'js-yaml';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Initialize the MCP Server
 const server = new McpServer({
   name: "Clinical-Intelligence-Server",
   version: "1.0.0",
 });
 
-// --- Define All Tools ---
+// --- Define All Tools (No changes here) ---
 
-// Tool 1: Get summary from the local SQLite database
 server.tool(
   "getSummaryFromDB",
   "Retrieves an AI-generated summary from a patient's clinical notes in the local MIMIC-III database.",
@@ -27,7 +32,6 @@ server.tool(
   }
 );
 
-// Tool 2: Get summary from the live, public FHIR server
 server.tool(
   "getSummaryFromFHIR",
   "Retrieves an AI-generated summary from a patient's data on a live, public FHIR server.",
@@ -40,7 +44,6 @@ server.tool(
   }
 );
 
-// Tool 3: Search for clinical guidelines
 server.tool(
   "searchGuidelines",
   "Searches for clinical practice guidelines based on a medical topic.",
@@ -53,10 +56,21 @@ server.tool(
   }
 );
 
-// --- Setup Express and the MCP Transport Layer ---
+// --- Setup Express and Endpoints ---
 const app = express();
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
+// --- NEW: Setup for API Documentation ---
+// This is needed to correctly locate files when using ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const swaggerDocument = yaml.load(fs.readFileSync(path.join(__dirname, 'openapi.yaml'), 'utf8'));
+
+// This creates the new /api-docs endpoint
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+
+// --- Setup MCP and Health Check Endpoints ---
 const setupServer = async () => {
   await server.connect(transport);
   app.post("/mcp", (req: Request, res: Response) => {
@@ -64,13 +78,14 @@ const setupServer = async () => {
   });
 };
 
-app.get("/", (req, res) => res.send("Clinical Intelligence MCP Server is running."));
+app.get("/", (req, res) => res.send("Clinical Intelligence MCP Server is running. Health check OK. API Docs are at /api-docs"));
 
 const PORT = process.env.PORT || 3000;
 setupServer()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`✅ Clinical Intelligence Server listening on port ${PORT}`);
+      console.log(`✅ API Docs available at http://localhost:${PORT}/api-docs`);
     });
   })
   .catch((error) => {
