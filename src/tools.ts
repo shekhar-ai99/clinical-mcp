@@ -2,14 +2,20 @@
 import sqlite3 from 'sqlite3';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// --- Securely Initialize API Key ---
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  // This is a critical error, so we stop the application from starting.
+  throw new Error("GEMINI_API_KEY environment variable not set. Please check your Colab Secrets.");
+}
+
 // --- Initialize Clients ---
 
 // For Colab, use the absolute path to your database file
 const db = new sqlite3.Database('/content/clinical-mcp/mimiciii_demo.db');
 
-// Initialize the Google Gemini client by reading the API key from the environment.
-// This is much more secure than hardcoding it.
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize the Google Gemini client with the validated API key.
+const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
 
 
