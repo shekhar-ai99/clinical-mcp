@@ -15,18 +15,19 @@ const server = new McpServer({
 
 server.tool(
   "getPatientSummary",
-  "Retrieves a clinical summary for a specific patient by their ID.",
+  "Retrieves a clinical summary for a specific patient by their ID from the MIMIC-III database.",
   {
-    patientId: z.string().describe("The unique identifier for the patient (e.g., PID-001)"),
+    // UPDATED: The description now reflects the numeric ID from the database.
+    patientId: z.string().describe("The numeric subject ID for the patient (e.g., '41', '109')"),
   },
   async (params: { patientId: string }) => {
     console.log(`[SDK Server] Tool call: getPatientSummary for ID ${params.patientId}`);
+    // The 'result' object will be { summary: "..." }
     const result = await getPatientSummary({ patientId: params.patientId });
-
     
-    // Return the JSON result as a string with type "text"
+    // UPDATED: We now access the .summary property directly for a cleaner output.
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [{ type: "text", text: result.summary }],
     };
   }
 );
@@ -50,7 +51,6 @@ server.tool(
 
 // --- Setup Express and the MCP Transport Layer ---
 const app = express();
-app.use(express.json()); // <-- critical!
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
 // Connect the server logic to the transport layer and handle requests
