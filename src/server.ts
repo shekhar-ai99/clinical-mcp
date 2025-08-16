@@ -81,8 +81,8 @@ if (swaggerDocument) {
 // MCP endpoint
 const setupServer = async () => {
   await server.connect(transport);
-  app.post("/mcp", (req: Request, res: Response) => {
-    transport.handleRequest(req, res, req.body);
+  app.post("/mcp", async (req: Request, res: Response) => { // Add 'async' here
+  await transport.handleRequest(req, res, req.body);      // Add 'await' here
   });
 };
 
