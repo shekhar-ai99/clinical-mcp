@@ -1,11 +1,11 @@
 {
   "name": "clinical-mcp-server",
   "version": "1.0.0",
-  "description": "MCP Server for Clinical Intelligence using the official SDK.",
+  "description": "MCP Server for Clinical Intelligence using a local LLM (llama.cpp).",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "build": "mkdir -p dist && tsc && cp src/openapi.yaml dist/",
+    "build": "mkdir -p dist && tsc && cp -f src/openapi.yaml dist/ || true",
     "start": "node dist/server.js",
     "dev": "nodemon src/server.ts"
   },
@@ -23,6 +23,7 @@
     "@types/express": "^4.17.21",
     "@types/js-yaml": "^4.0.9",
     "@types/swagger-ui-express": "^4.1.6",
+    "@types/node": "^20.14.11",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
