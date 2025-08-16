@@ -1,24 +1,18 @@
-// src/server.ts
 import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { getSummaryFromDB, getSummaryFromFHIR, searchGuidelines } from "./tools.js";
+import swaggerUi from "swagger-ui-express";
+import yaml from "js-yaml";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// --- Import Swagger and YAML libraries ---
-import swaggerUi from 'swagger-ui-express';
-import yaml from 'js-yaml';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Initialize the MCP Server
 const server = new McpServer({
   name: "Clinical-Intelligence-Server",
   version: "1.0.0",
 });
-
-// --- Define All Tools (No changes here) ---
 
 server.tool(
   "getSummaryFromDB",
@@ -56,22 +50,16 @@ server.tool(
   }
 );
 
-// --- Setup Express and Endpoints ---
 const app = express();
-app.use(express.json()); 
+app.use(express.json());
 const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
-// --- Setup for API Documentation ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const swaggerDocument = yaml.load(fs.readFileSync(path.join(__dirname, 'openapi.yaml'), 'utf8'));
+const swaggerDocument = yaml.load(fs.readFileSync(path.join(__dirname, "openapi.yaml"), "utf8"));
 
-// This creates the new /api-docs endpoint
-// FIX: We cast swaggerDocument to 'any' to resolve the TypeScript error.
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument as any));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-
-// --- Setup MCP and Health Check Endpoints ---
 const setupServer = async () => {
   await server.connect(transport);
   app.post("/mcp", (req: Request, res: Response) => {
