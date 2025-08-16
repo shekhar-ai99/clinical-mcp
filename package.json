@@ -1,4 +1,4 @@
-this is my package.json--{
+{
   "name": "clinical-mcp-server",
   "version": "1.0.0",
   "description": "MCP Server for Clinical Intelligence using the official SDK.",
@@ -14,7 +14,10 @@ this is my package.json--{
     "express": "^4.19.2",
     "js-yaml": "^4.1.0",
     "swagger-ui-express": "^5.0.1",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "node-llama-cpp": "^2.8.0",
+    "fhir-kit-client": "^1.9.2",
+    "sqlite3": "^5.1.6"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
